@@ -8,6 +8,7 @@
 import {
   createEventRequestAction,
   listEventRequestsAction,
+  reviewEventRequestAction,
   updateEventRequestStatusAction,
 } from '@/app/actions/event-requests';
 import {
@@ -19,7 +20,10 @@ import {
   type EventRequestFormState,
 } from '@/lib/event-request';
 import { createAdminClient } from '@/lib/supabase/admin';
-import type { EventRequestStatus } from '@/lib/event-request-config';
+import type {
+  EventRequestReviewStep,
+  EventRequestStatus,
+} from '@/lib/event-request-config';
 
 const requiredEnvVars = [
   'NEXT_PUBLIC_SUPABASE_URL',
@@ -151,11 +155,53 @@ describe('Event request server actions', () => {
       );
     }
 
-    const updatedRecord = listResponse.data.find(
+    let updatedRecord = listResponse.data.find(
       (request) => request.id === createdEventRequestId,
     );
 
     expect(updatedRecord).toBeDefined();
     expect(updatedRecord?.status).toBe(nextStatus);
+    expect(updatedRecord?.review_step).toBe('FINANCIAL_MANAGER');
+
+    const reviewSteps: EventRequestReviewStep[] = [
+      'FINANCIAL_MANAGER',
+      'ADMINISTRATION_MANAGER',
+      'CUSTOMER_MEETING',
+    ];
+
+    for (const step of reviewSteps) {
+      const decisionResponse = await reviewEventRequestAction(
+        createdEventRequestId,
+        step,
+        'APPROVE',
+      );
+      expect(decisionResponse.success).toBe(true);
+
+      const checkpointResponse = await listEventRequestsAction();
+      if (!checkpointResponse.success) {
+        throw new Error(
+          `listEventRequestsAction failed: ${
+            checkpointResponse.error ?? 'unknown error'
+          }`,
+        );
+      }
+
+      updatedRecord = checkpointResponse.data.find(
+        (request) => request.id === createdEventRequestId,
+      );
+
+      expect(updatedRecord).toBeDefined();
+
+      if (step === 'FINANCIAL_MANAGER') {
+        expect(updatedRecord?.status).toBe('PENDING');
+        expect(updatedRecord?.review_step).toBe('ADMINISTRATION_MANAGER');
+      } else if (step === 'ADMINISTRATION_MANAGER') {
+        expect(updatedRecord?.status).toBe('PENDING');
+        expect(updatedRecord?.review_step).toBe('CUSTOMER_MEETING');
+      } else {
+        expect(updatedRecord?.status).toBe('APPROVED');
+        expect(updatedRecord?.review_step).toBeNull();
+      }
+    }
   });
 });

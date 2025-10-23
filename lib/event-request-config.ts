@@ -2,6 +2,7 @@ export const EVENT_REQUEST_STATUSES = [
   "DRAFT",
   "PENDING",
   "REJECTED",
+  "APPROVED",
   "OPEN",
 ] as const;
 
@@ -11,7 +12,6 @@ export const EVENT_REQUEST_REVIEW_STEPS = [
   { key: "FINANCIAL_MANAGER", label: "Financial Manager" },
   { key: "ADMINISTRATION_MANAGER", label: "Administration Manager" },
   { key: "CUSTOMER_MEETING", label: "Customer Meeting" },
-  { key: "RESOURCE_CONFIRMING", label: "Resource Confirming" },
 ] as const;
 
 export type EventRequestReviewStep =
@@ -22,5 +22,6 @@ export const EVENT_REQUEST_STATUS_STAGE: Record<EventRequestStatus, number | nul
     DRAFT: null,
     REJECTED: null,
     PENDING: 0,
-    OPEN: null,
+    APPROVED: EVENT_REQUEST_REVIEW_STEPS.length,
+    OPEN: EVENT_REQUEST_REVIEW_STEPS.length,
   };

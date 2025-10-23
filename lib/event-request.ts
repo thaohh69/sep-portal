@@ -1,4 +1,8 @@
-import type { EventRequestStatus } from "@/lib/event-request-config";
+import {
+  EVENT_REQUEST_REVIEW_STEPS,
+  type EventRequestReviewStep,
+  type EventRequestStatus,
+} from "@/lib/event-request-config";
 
 export const EVENT_TYPES = [
   "CONFERENCE",
@@ -43,6 +47,7 @@ export type EventRequestRecord = {
   client: ClientSummary | null;
   event_type: EventType;
   status: EventRequestStatus;
+  review_step: EventRequestReviewStep | null;
   start_time: string;
   finish_time: string;
   location: string | null;
@@ -84,6 +89,7 @@ export type EventRequestInsertPayload = {
   note: string | null;
   submitter_id: string;
   status: EventRequestStatus;
+  review_step: EventRequestReviewStep | null;
 };
 
 export type ValidateEventRequestFormResult =
@@ -97,6 +103,7 @@ export const EVENT_REQUEST_SELECT_FIELDS = `
   submitter:submitter_id ( id, username, email ),
   event_type,
   status,
+  review_step,
   start_time,
   finish_time,
   location,
@@ -159,6 +166,7 @@ export function buildEventRequestInsertPayload(
     preferences: input.preferences,
     submitter_id: input.submitterId,
     status: "DRAFT",
+    review_step: null,
   };
 }
 
@@ -171,6 +179,7 @@ export function mapEventRequestRow(
     client: unwrapRelation<ClientSummary>(row.client),
     event_type: row.event_type as EventType,
     status: normalizeStatus(row.status),
+    review_step: normalizeReviewStep(row.review_step),
     start_time: row.start_time as string,
     finish_time: row.finish_time as string,
     location: (row.location as string | null | undefined) ?? null,
@@ -192,12 +201,28 @@ export function normalizeStatus(value: unknown): EventRequestStatus {
     upper === "DRAFT" ||
     upper === "PENDING" ||
     upper === "REJECTED" ||
+    upper === "APPROVED" ||
     upper === "OPEN"
   ) {
     return upper as EventRequestStatus;
   }
 
   return "DRAFT";
+}
+
+export function normalizeReviewStep(
+  value: unknown,
+): EventRequestReviewStep | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const upper = value.toUpperCase();
+  const step = EVENT_REQUEST_REVIEW_STEPS.find(
+    (item) => item.key === upper,
+  );
+
+  return step?.key ?? null;
 }
 
 export function unwrapRelation<T>(value: unknown): T | null {
