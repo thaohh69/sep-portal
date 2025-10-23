@@ -1,6 +1,7 @@
 /**
  * Integration test: create an event request through the UI and ensure it appears in the list.
- * Requires NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, TEST_USER, TEST_PW.
+ * Requires NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+ * TEST_CUSTOMER_SERVICE_USER, TEST_CUSTOMER_SERVICE_PW.
  */
 
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
@@ -10,11 +11,17 @@ import { EventFlowPanel } from "@/components/event-flow-panel";
 import { hasEnvVars } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
-if (!hasEnvVars) {
+const rawCustomerEmail = process.env.TEST_CUSTOMER_SERVICE_USER;
+const rawCustomerPassword = process.env.TEST_CUSTOMER_SERVICE_PW;
+
+if (!hasEnvVars || !rawCustomerEmail || !rawCustomerPassword) {
   throw new Error(
-    "Supabase environment variables are required for event request tests.",
+    "Missing Supabase environment variables or TEST_CUSTOMER_SERVICE_* credentials required for event request creation tests.",
   );
 }
+
+const CUSTOMER_EMAIL = rawCustomerEmail;
+const CUSTOMER_PASSWORD = rawCustomerPassword;
 
 jest.setTimeout(30000);
 
@@ -60,17 +67,9 @@ async function signInIfNeeded() {
   }
 
   if (!session) {
-    const email = process.env.TEST_USER;
-    const password = process.env.TEST_PW;
-    if (!email || !password) {
-      throw new Error(
-        "Event request UI tests require TEST_USER and TEST_PW credentials.",
-      );
-    }
-
     const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+      email: CUSTOMER_EMAIL,
+      password: CUSTOMER_PASSWORD,
     });
     if (signInError) {
       throw signInError;
@@ -87,7 +86,7 @@ async function cleanupEventRequests(
   await supabase.from("client").delete().eq("id", clientId);
 }
 
-describe("EventFlowPanel UI integration", () => {
+describe("Event request creation", () => {
   beforeAll(async () => {
     await signInIfNeeded();
   });
