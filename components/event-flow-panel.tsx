@@ -3,38 +3,33 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/auth-context";
-import { hasEnvVars } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 import {
   EVENT_PREFERENCES,
   EVENT_TYPES,
-  createEventRequest,
-  listEventRequests,
-  updateEventRequestStatus,
+  buildCreateEventRequestInput,
   type EventPreference,
+  type EventRequestFormState,
   type EventRequestRecord,
   type EventType,
-} from "@/lib/event-request-service";
+  validateEventRequestForm,
+} from "@/lib/event-request";
 import {
   EVENT_REQUEST_REVIEW_STEPS,
   EVENT_REQUEST_STATUS_STAGE,
   type EventRequestStatus,
 } from "@/lib/event-request-config";
+import {
+  createEventRequestAction,
+  listEventRequestsAction,
+  updateEventRequestStatusAction,
+} from "@/app/actions/event-requests";
+import { listClientsAction } from "@/app/actions/client-management";
+import type { ClientRecord } from "@/lib/client-management";
 
 type AlertState =
   | { type: "error"; message: string }
   | { type: "success"; message: string }
   | null;
-
-type FormState = {
-  clientId: string;
-  eventType: EventType;
-  startTime: string;
-  finishTime: string;
-  location: string;
-  preferences: EventPreference[];
-  note: string;
-};
 
 type ClientOption = {
   id: number;
@@ -43,7 +38,7 @@ type ClientOption = {
   phone_number: string | null;
 };
 
-const defaultFormState: FormState = {
+const defaultFormState: EventRequestFormState = {
   clientId: "",
   eventType: EVENT_TYPES[0],
   startTime: "",
@@ -63,49 +58,46 @@ export function EventFlowPanel() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [viewingRequest, setViewingRequest] =
     useState<EventRequestRecord | null>(null);
-  const [formState, setFormState] = useState<FormState>(defaultFormState);
+  const [formState, setFormState] =
+    useState<EventRequestFormState>(defaultFormState);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
   const canCreate = profile?.role === "CUSTOMER_SERVICE";
   const canReview = profile?.role === "SENIOR_CUSTOMER_SERVICE";
-  const supabase = useMemo(() => {
-    if (!hasEnvVars) {
-      return null;
-    }
-    return createClient();
-  }, []);
 
   const fetchData = useCallback(async () => {
-    if (!supabase) {
-      setAlert({
-        type: "error",
-        message:
-          "Supabase environment variables are missing. Contact an administrator.",
-      });
-      setEventRequests([]);
-      setClients([]);
-      setIsLoading(false);
-      return;
-    }
-
     setIsLoading(true);
     setAlert(null);
     try {
-      const [requests, clientResponse] = await Promise.all([
-        listEventRequests(),
-        supabase
-          .from("client")
-          .select("id, name, email, phone_number")
-          .order("name", { ascending: true }),
+      const [requestsResult, clientsResult] = await Promise.all([
+        listEventRequestsAction(),
+        listClientsAction(),
       ]);
 
-      if (clientResponse.error) {
-        throw clientResponse.error;
+      if (!requestsResult.success) {
+        throw new Error(
+          requestsResult.error ||
+            "Failed to load event requests. Try again later.",
+        );
       }
 
-      const clientData = (clientResponse.data ?? []) as ClientOption[];
+      if (!clientsResult.success) {
+        throw new Error(
+          clientsResult.error ||
+            "Failed to load client records. Try again later.",
+        );
+      }
 
-      setEventRequests(requests);
+      const clientData = clientsResult.data.map(
+        (client: ClientRecord): ClientOption => ({
+          id: client.id,
+          name: client.name,
+          email: client.email,
+          phone_number: client.phone_number,
+        }),
+      );
+
+      setEventRequests(requestsResult.data);
       setClients(clientData);
       setFormState((prev) => ({
         ...prev,
@@ -188,19 +180,18 @@ export function EventFlowPanel() {
       return;
     }
 
-    if (!hasEnvVars) {
-      setAlert({
-        type: "error",
-        message:
-          "Supabase environment variables are missing. Contact an administrator.",
-      });
-      return;
-    }
-
     setUpdatingId(requestId);
     setAlert(null);
     try {
-      await updateEventRequestStatus(requestId, nextStatus);
+      const response = await updateEventRequestStatusAction(
+        requestId,
+        nextStatus,
+      );
+      if (!response.success) {
+        throw new Error(
+          response.error || "Failed to update event request status.",
+        );
+      }
       await fetchData();
       setAlert({
         type: "success",
@@ -233,19 +224,9 @@ export function EventFlowPanel() {
       return;
     }
 
-    if (!formState.clientId) {
-      setAlert({
-        type: "error",
-        message: "Please select a client before submitting.",
-      });
-      return;
-    }
-
-    if (!formState.startTime || !formState.finishTime) {
-      setAlert({
-        type: "error",
-        message: "Start time and finish time are required.",
-      });
+    const validation = validateEventRequestForm(formState);
+    if (!validation.ok) {
+      setAlert({ type: "error", message: validation.message });
       return;
     }
 
@@ -253,18 +234,14 @@ export function EventFlowPanel() {
     setAlert(null);
 
     try {
-      const payload = {
-        clientId: Number(formState.clientId),
-        eventType: formState.eventType,
-        startTime: new Date(formState.startTime).toISOString(),
-        finishTime: new Date(formState.finishTime).toISOString(),
-        location: formState.location,
-        note: formState.note,
-        preferences: formState.preferences,
-        submitterId: profile.id,
-      };
 
-      await createEventRequest(payload);
+      const payload = buildCreateEventRequestInput(formState, profile.id);
+      const response = await createEventRequestAction(payload);
+      if (!response.success) {
+        throw new Error(
+          response.error || "Failed to create the event request.",
+        );
+      }
       setAlert({
         type: "success",
         message: "Event request created successfully.",
@@ -300,7 +277,7 @@ export function EventFlowPanel() {
     );
   };
 
-  const sortedPreferences = useMemo(
+  const sortedPreferences = useMemo<EventPreference[]>(
     () => EVENT_PREFERENCES.slice().sort(),
     [],
   );

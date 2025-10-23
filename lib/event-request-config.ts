@@ -1,5 +1,3 @@
-"use client";
-
 export const EVENT_REQUEST_STATUSES = [
   "DRAFT",
   "PENDING",
