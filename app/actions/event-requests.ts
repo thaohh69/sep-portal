@@ -35,6 +35,13 @@ export type UpdateEventRequestStatusResult = BaseActionResult;
 
 export type ReviewEventRequestDecision = 'APPROVE' | 'REJECT';
 
+const FEEDBACK_COLUMN_BY_STEP: Record<EventRequestReviewStep, keyof EventRequestRecord> =
+  {
+    FINANCIAL_MANAGER: 'financial_manager_feedback',
+    ADMINISTRATION_MANAGER: 'administration_manager_feedback',
+    CUSTOMER_MEETING: 'customer_meeting_feedback',
+  };
+
 export async function listEventRequestsAction(): Promise<ListEventRequestsResult> {
   const supabase = createAdminClient();
 
@@ -79,6 +86,7 @@ export async function createEventRequestAction(
 export async function updateEventRequestStatusAction(
   requestId: number,
   nextStatus: EventRequestStatus,
+  options?: { feedback?: string },
 ): Promise<UpdateEventRequestStatusResult> {
   const supabase = createAdminClient();
 
@@ -86,10 +94,17 @@ export async function updateEventRequestStatusAction(
     status: nextStatus,
   };
 
+  const feedback =
+    typeof options?.feedback === 'string'
+      ? options.feedback.trim() || null
+      : null;
+
   if (nextStatus === 'PENDING') {
     updates.review_step = 'FINANCIAL_MANAGER';
+    updates.scso_feedback = feedback;
   } else {
     updates.review_step = null;
+    updates.scso_feedback = feedback;
   }
 
   const { error } = await supabase
@@ -109,6 +124,7 @@ export async function reviewEventRequestAction(
   requestId: number,
   reviewStep: EventRequestReviewStep,
   decision: ReviewEventRequestDecision,
+  options?: { feedback?: string },
 ): Promise<UpdateEventRequestStatusResult> {
   const supabase = createAdminClient();
 
@@ -172,11 +188,18 @@ export async function reviewEventRequestAction(
     }
   }
 
+  const feedbackColumn = FEEDBACK_COLUMN_BY_STEP[reviewStep];
+  const feedbackValue =
+    typeof options?.feedback === 'string'
+      ? options.feedback.trim() || null
+      : null;
+
   const { error: updateError } = await supabase
     .from(EVENT_REQUEST_TABLE)
     .update({
       status: statusUpdate,
       review_step: nextStep,
+      [feedbackColumn]: feedbackValue,
     })
     .eq('id', requestId);
 

@@ -140,9 +140,11 @@ describe('Event request server actions', () => {
     expect(createResponse.record.event_type).toBe('CONFERENCE');
 
     const nextStatus: EventRequestStatus = 'PENDING';
+    const scsoFeedback = 'Initial SCSO feedback';
     const updateResponse = await updateEventRequestStatusAction(
       createdEventRequestId,
       nextStatus,
+      { feedback: scsoFeedback },
     );
     expect(updateResponse.success).toBe(true);
 
@@ -162,6 +164,7 @@ describe('Event request server actions', () => {
     expect(updatedRecord).toBeDefined();
     expect(updatedRecord?.status).toBe(nextStatus);
     expect(updatedRecord?.review_step).toBe('FINANCIAL_MANAGER');
+    expect(updatedRecord?.scso_feedback).toBe(scsoFeedback);
 
     const reviewSteps: EventRequestReviewStep[] = [
       'FINANCIAL_MANAGER',
@@ -169,11 +172,18 @@ describe('Event request server actions', () => {
       'CUSTOMER_MEETING',
     ];
 
+    const feedbackByStep: Record<EventRequestReviewStep, string> = {
+      FINANCIAL_MANAGER: 'Financial manager feedback',
+      ADMINISTRATION_MANAGER: 'Administration manager feedback',
+      CUSTOMER_MEETING: 'Customer meeting feedback',
+    };
+
     for (const step of reviewSteps) {
       const decisionResponse = await reviewEventRequestAction(
         createdEventRequestId,
         step,
         'APPROVE',
+        { feedback: feedbackByStep[step] },
       );
       expect(decisionResponse.success).toBe(true);
 
@@ -195,12 +205,21 @@ describe('Event request server actions', () => {
       if (step === 'FINANCIAL_MANAGER') {
         expect(updatedRecord?.status).toBe('PENDING');
         expect(updatedRecord?.review_step).toBe('ADMINISTRATION_MANAGER');
+        expect(updatedRecord?.financial_manager_feedback).toBe(
+          feedbackByStep.FINANCIAL_MANAGER,
+        );
       } else if (step === 'ADMINISTRATION_MANAGER') {
         expect(updatedRecord?.status).toBe('PENDING');
         expect(updatedRecord?.review_step).toBe('CUSTOMER_MEETING');
+        expect(updatedRecord?.administration_manager_feedback).toBe(
+          feedbackByStep.ADMINISTRATION_MANAGER,
+        );
       } else {
         expect(updatedRecord?.status).toBe('APPROVED');
         expect(updatedRecord?.review_step).toBeNull();
+        expect(updatedRecord?.customer_meeting_feedback).toBe(
+          feedbackByStep.CUSTOMER_MEETING,
+        );
       }
     }
   });

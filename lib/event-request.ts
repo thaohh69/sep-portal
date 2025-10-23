@@ -48,6 +48,10 @@ export type EventRequestRecord = {
   event_type: EventType;
   status: EventRequestStatus;
   review_step: EventRequestReviewStep | null;
+  scso_feedback: string | null;
+  financial_manager_feedback: string | null;
+  administration_manager_feedback: string | null;
+  customer_meeting_feedback: string | null;
   start_time: string;
   finish_time: string;
   location: string | null;
@@ -90,6 +94,10 @@ export type EventRequestInsertPayload = {
   submitter_id: string;
   status: EventRequestStatus;
   review_step: EventRequestReviewStep | null;
+  scso_feedback: string | null;
+  financial_manager_feedback: string | null;
+  administration_manager_feedback: string | null;
+  customer_meeting_feedback: string | null;
 };
 
 export type ValidateEventRequestFormResult =
@@ -104,6 +112,10 @@ export const EVENT_REQUEST_SELECT_FIELDS = `
   event_type,
   status,
   review_step,
+  scso_feedback,
+  financial_manager_feedback,
+  administration_manager_feedback,
+  customer_meeting_feedback,
   start_time,
   finish_time,
   location,
@@ -167,6 +179,10 @@ export function buildEventRequestInsertPayload(
     submitter_id: input.submitterId,
     status: "DRAFT",
     review_step: null,
+    scso_feedback: null,
+    financial_manager_feedback: null,
+    administration_manager_feedback: null,
+    customer_meeting_feedback: null,
   };
 }
 
@@ -180,6 +196,13 @@ export function mapEventRequestRow(
     event_type: row.event_type as EventType,
     status: normalizeStatus(row.status),
     review_step: normalizeReviewStep(row.review_step),
+    scso_feedback: (row.scso_feedback as string | null | undefined) ?? null,
+    financial_manager_feedback:
+      (row.financial_manager_feedback as string | null | undefined) ?? null,
+    administration_manager_feedback:
+      (row.administration_manager_feedback as string | null | undefined) ?? null,
+    customer_meeting_feedback:
+      (row.customer_meeting_feedback as string | null | undefined) ?? null,
     start_time: row.start_time as string,
     finish_time: row.finish_time as string,
     location: (row.location as string | null | undefined) ?? null,

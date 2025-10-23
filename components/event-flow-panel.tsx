@@ -64,6 +64,9 @@ export function EventFlowPanel() {
   const [formState, setFormState] =
     useState<EventRequestFormState>(defaultFormState);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [feedbackNotes, setFeedbackNotes] = useState<Record<number, string>>(
+    {},
+  );
 
   const role = profile?.role;
   const canCreate = role === "CUSTOMER_SERVICE";
@@ -138,6 +141,27 @@ export function EventFlowPanel() {
     }));
   };
 
+  const getFeedbackDraft = (requestId: number) =>
+    feedbackNotes[requestId] ?? "";
+
+  const clearFeedbackDraft = (requestId: number) => {
+    setFeedbackNotes((prev) => {
+      if (!(requestId in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[requestId];
+      return next;
+    });
+  };
+
+  const setFeedbackDraft = (requestId: number, value: string) => {
+    setFeedbackNotes((prev) => ({
+      ...prev,
+      [requestId]: value,
+    }));
+  };
+
   const openCreateModal = () => {
     if (!canCreate) {
       return;
@@ -189,9 +213,11 @@ export function EventFlowPanel() {
     setUpdatingId(requestId);
     setAlert(null);
     try {
+      const feedback = getFeedbackDraft(requestId).trim();
       const response = await updateEventRequestStatusAction(
         requestId,
         nextStatus,
+        { feedback },
       );
       if (!response.success) {
         throw new Error(
@@ -199,6 +225,7 @@ export function EventFlowPanel() {
         );
       }
       await fetchData();
+      clearFeedbackDraft(requestId);
       setAlert({
         type: "success",
         message:
@@ -250,7 +277,10 @@ export function EventFlowPanel() {
     setAlert(null);
 
     try {
-      const response = await reviewEventRequestAction(requestId, step, decision);
+      const feedback = getFeedbackDraft(requestId).trim();
+      const response = await reviewEventRequestAction(requestId, step, decision, {
+        feedback,
+      });
       if (!response.success) {
         throw new Error(
           response.error || "Failed to update event request status.",
@@ -258,6 +288,7 @@ export function EventFlowPanel() {
       }
 
       await fetchData();
+      clearFeedbackDraft(requestId);
 
       if (decision === "REJECT") {
         setAlert({
@@ -380,6 +411,7 @@ export function EventFlowPanel() {
       canHandleReviewStep(request.review_step);
 
     const activeReviewStep = request.review_step;
+    const feedbackDraft = getFeedbackDraft(request.id);
 
     return (
       <article
@@ -424,58 +456,73 @@ export function EventFlowPanel() {
             />
           </div>
         )}
-        <div className="flex items-center gap-2 self-start md:self-center">
-          <button
-            type="button"
-            onClick={() => setViewingRequest(request)}
-            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
-          >
-            View
-          </button>
-          {canReviewDraft && (
-            <>
-              <button
-                type="button"
-                onClick={() => handleDraftDecision(request.id, "PENDING")}
-                className="rounded-md border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={updatingId === request.id}
-              >
-                {updatingId === request.id ? "Submitting..." : "Submit for review"}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDraftDecision(request.id, "REJECTED")}
-                className="rounded-md border border-rose-500 px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={updatingId === request.id}
-              >
-                {updatingId === request.id ? "Processing..." : "Reject"}
-              </button>
-            </>
+        <div className="flex flex-col gap-2 self-start md:self-center md:w-1/3">
+          {(canReviewDraft || canReviewPending) && (
+            <textarea
+              value={feedbackDraft}
+              onChange={(event) =>
+                setFeedbackDraft(request.id, event.target.value)
+              }
+              placeholder="Add feedback for this decision"
+              rows={2}
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            />
           )}
-          {canReviewPending && activeReviewStep && (
-            <>
-              <button
-                type="button"
-                onClick={() =>
-                  handleReviewDecision(request.id, activeReviewStep, "APPROVE")
-                }
-                className="rounded-md border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={updatingId === request.id}
-              >
-                {updatingId === request.id ? "Approving..." : "Approve"}
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  handleReviewDecision(request.id, activeReviewStep, "REJECT")
-                }
-                className="rounded-md border border-rose-500 px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={updatingId === request.id}
-              >
-                {updatingId === request.id ? "Processing..." : "Reject"}
-              </button>
-            </>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setViewingRequest(request)}
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+            >
+              View
+            </button>
+            {canReviewDraft && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleDraftDecision(request.id, "PENDING")}
+                  className="rounded-md border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={updatingId === request.id}
+                >
+                  {updatingId === request.id
+                    ? "Submitting..."
+                    : "Submit for review"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDraftDecision(request.id, "REJECTED")}
+                  className="rounded-md border border-rose-500 px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={updatingId === request.id}
+                >
+                  {updatingId === request.id ? "Processing..." : "Reject"}
+                </button>
+              </>
+            )}
+            {canReviewPending && activeReviewStep && (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleReviewDecision(request.id, activeReviewStep, "APPROVE")
+                  }
+                  className="rounded-md border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={updatingId === request.id}
+                >
+                  {updatingId === request.id ? "Approving..." : "Approve"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleReviewDecision(request.id, activeReviewStep, "REJECT")
+                  }
+                  className="rounded-md border border-rose-500 px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={updatingId === request.id}
+                >
+                  {updatingId === request.id ? "Processing..." : "Reject"}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </article>
     );
@@ -584,6 +631,18 @@ export function EventFlowPanel() {
             </DetailItem>
             <DetailItem label="Notes">
               {viewingRequest.note || "No additional notes"}
+            </DetailItem>
+            <DetailItem label="SCSO feedback">
+              {viewingRequest.scso_feedback || "No feedback"}
+            </DetailItem>
+            <DetailItem label="Financial Manager feedback">
+              {viewingRequest.financial_manager_feedback || "No feedback"}
+            </DetailItem>
+            <DetailItem label="Administration Manager feedback">
+              {viewingRequest.administration_manager_feedback || "No feedback"}
+            </DetailItem>
+            <DetailItem label="Customer Meeting feedback">
+              {viewingRequest.customer_meeting_feedback || "No feedback"}
             </DetailItem>
           </div>
         </div>
