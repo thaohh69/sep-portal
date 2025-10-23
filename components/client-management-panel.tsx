@@ -1,33 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { hasEnvVars } from "@/lib/utils";
-
-type ClientRecord = {
-  id: number;
-  name: string;
-  address: string | null;
-  phone_number: string | null;
-  email: string | null;
-  discount_flag: boolean | null;
-};
-
-type FormState = {
-  name: string;
-  address: string;
-  phoneNumber: string;
-  email: string;
-};
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  createClientAction,
+  deleteClientAction,
+  listClientsAction,
+} from "@/app/actions/client-management";
+import type { ClientRecord, ClientFormState } from "@/lib/client-management";
+import {
+  normalizeClientForm,
+  validateClientForm,
+} from "@/lib/client-management";
 
 type Feedback =
   | { type: "success"; message: string }
   | { type: "error"; message: string }
   | null;
 
-const CLIENT_TABLE = "client";
-
-const defaultFormState: FormState = {
+const defaultFormState: ClientFormState = {
   name: "",
   address: "",
   phoneNumber: "",
@@ -35,43 +25,27 @@ const defaultFormState: FormState = {
 };
 
 export function ClientManagementPanel() {
-  const supabase = useMemo(() => {
-    if (!hasEnvVars) {
-      return null;
-    }
-    return createClient();
-  }, []);
-
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formState, setFormState] = useState<FormState>(defaultFormState);
+  const [formState, setFormState] = useState<ClientFormState>(defaultFormState);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
   const fetchClients = useCallback(async () => {
-    if (!supabase) {
-      setFeedback({
-        type: "error",
-        message:
-          "Supabase environment variables are missing. Contact an administrator.",
-      });
-      return;
-    }
-
     setIsLoading(true);
     setFeedback(null);
     try {
-      const { data, error } = await supabase
-        .from(CLIENT_TABLE)
-        .select("id, name, address, phone_number, email, discount_flag")
-        .order("name", { ascending: true });
+      const response = await listClientsAction();
 
-      if (error) {
-        throw error;
+      if (!response.success) {
+        throw new Error(
+          response.error ||
+            "Unable to load client records. Please try again later.",
+        );
       }
 
-      setClients((data ?? []) as ClientRecord[]);
+      setClients(response.data);
     } catch (error) {
       console.error(error);
       setFeedback({
@@ -84,7 +58,7 @@ export function ClientManagementPanel() {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     void fetchClients();
@@ -99,20 +73,11 @@ export function ClientManagementPanel() {
     resetForm();
   };
 
-  const handleCreateClient = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleCreateClient = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase) {
-      setFeedback({
-        type: "error",
-        message:
-          "Supabase environment variables are missing. Contact an administrator.",
-      });
-      return;
-    }
-
-    const trimmedName = formState.name.trim();
-    if (!trimmedName) {
-      setFeedback({ type: "error", message: "Client name is required." });
+    const validation = validateClientForm(formState);
+    if (!validation.ok) {
+      setFeedback({ type: "error", message: validation.message });
       return;
     }
 
@@ -120,22 +85,18 @@ export function ClientManagementPanel() {
     setFeedback(null);
 
     try {
-      const payload = {
-        name: trimmedName,
-        address: formState.address.trim() || null,
-        phone_number: formState.phoneNumber.trim() || null,
-        email: formState.email.trim() || null,
-      };
+      const payload = normalizeClientForm(formState);
+      const response = await createClientAction(payload);
 
-      const { error } = await supabase.from(CLIENT_TABLE).insert(payload);
-
-      if (error) {
-        throw error;
+      if (!response.success) {
+        throw new Error(
+          response.error || "Unable to create the client record.",
+        );
       }
 
       setFeedback({
         type: "success",
-        message: `${trimmedName} has been added.`,
+        message: `${payload.name} has been added.`,
       });
       closeModal();
       await fetchClients();
@@ -154,15 +115,6 @@ export function ClientManagementPanel() {
   };
 
   const handleDeleteClient = async (clientId: number) => {
-    if (!supabase) {
-      setFeedback({
-        type: "error",
-        message:
-          "Supabase environment variables are missing. Contact an administrator.",
-      });
-      return;
-    }
-
     const confirmed = window.confirm(
       "Are you sure you want to delete this client? This cannot be undone.",
     );
@@ -173,13 +125,10 @@ export function ClientManagementPanel() {
     setIsSubmitting(true);
     setFeedback(null);
     try {
-      const { error } = await supabase
-        .from(CLIENT_TABLE)
-        .delete()
-        .eq("id", clientId);
+      const response = await deleteClientAction(clientId);
 
-      if (error) {
-        throw error;
+      if (!response.success) {
+        throw new Error(response.error || "Unable to remove the client.");
       }
 
       setFeedback({
