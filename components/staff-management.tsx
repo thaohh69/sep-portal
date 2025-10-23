@@ -48,7 +48,7 @@ const defaultFormState: FormState = {
   phone: "",
   department: "CUSTOMER_SERVICE",
   role: "CUSTOMER_SERVICE",
-  permissions: ["home", "event-flow"],
+  permissions: ["home", "event-flow", "client-management"],
 };
 
 function ensurePermissions(input: MenuKey[]): MenuKey[] {
