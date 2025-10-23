@@ -10,6 +10,7 @@ import { EventFlowPanel } from "@/components/event-flow-panel";
 import { TaskDistributionPanel } from "@/components/task-distribution-panel";
 import { RecruitmentPanel } from "@/components/recruitment-panel";
 import { FinancialManagementPanel } from "@/components/financial-management-panel";
+import { ClientManagementPanel } from "@/components/client-management-panel";
 
 export default function HomePage() {
   const { profile, isInitializing, logout } = useAuth();
@@ -225,6 +226,10 @@ function ModuleContent({ activeMenu, isAccessible }: ModuleContentProps) {
 
   if (activeMenu === "task-distribution") {
     return <TaskDistributionPanel />;
+  }
+
+  if (activeMenu === "client-management") {
+    return <ClientManagementPanel />;
   }
 
   if (activeMenu === "recruitment") {

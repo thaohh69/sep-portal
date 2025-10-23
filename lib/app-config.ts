@@ -2,6 +2,7 @@ export type MenuKey =
   | "home"
   | "event-flow"
   | "task-distribution"
+  | "client-management"
   | "staff-management"
   | "recruitment"
   | "financial-management";
@@ -30,6 +31,7 @@ type Option<T> = {
 
 export const MENU_OPTIONS: Option<MenuKey>[] = [
   { value: "home", label: "Home" },
+  { value: "client-management", label: "Client Management" },
   { value: "event-flow", label: "Event Request Management" },
   { value: "task-distribution", label: "Task Distribution Management" },
   { value: "staff-management", label: "Staff Management" },
