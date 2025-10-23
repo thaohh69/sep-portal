@@ -281,13 +281,6 @@ export function EventFlowPanel() {
         >
           View
         </button>
-        <button
-          type="button"
-          disabled
-          className="rounded-md border border-slate-100 px-4 py-2 text-sm text-slate-300"
-        >
-          More
-        </button>
       </div>
     </article>
   );
