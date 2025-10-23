@@ -2,6 +2,10 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { hasEnvVars } from "@/lib/utils";
+import {
+  EVENT_REQUEST_STATUSES,
+  type EventRequestStatus,
+} from "@/lib/event-request-config";
 
 export const EVENT_TYPES = [
   "CONFERENCE",
@@ -45,7 +49,7 @@ export type EventRequestRecord = {
   client_id: number;
   client?: ClientSummary | null;
   event_type: EventType;
-  status: string;
+  status: EventRequestStatus;
   start_time: string;
   finish_time: string;
   location: string | null;
@@ -104,7 +108,14 @@ export async function listEventRequests(): Promise<EventRequestRecord[]> {
     throw error;
   }
 
-  return ((data ?? []) as unknown) as EventRequestRecord[];
+  const records = (data ?? []) as Record<string, unknown>[];
+
+  return records.map((row) => ({
+    ...row,
+    client: unwrapRelation<ClientSummary>(row.client),
+    submitter: unwrapRelation<SubmitterSummary>(row.submitter),
+    status: normalizeStatus(row.status),
+  })) as EventRequestRecord[];
 }
 
 export async function getEventRequest(
@@ -137,7 +148,17 @@ export async function getEventRequest(
     throw error;
   }
 
-  return (data as unknown as EventRequestRecord | null) ?? null;
+  if (!data) {
+    return null;
+  }
+
+  const record = data as Record<string, unknown>;
+  return {
+    ...record,
+    client: unwrapRelation<ClientSummary>(record.client),
+    submitter: unwrapRelation<SubmitterSummary>(record.submitter),
+    status: normalizeStatus(record.status),
+  } as EventRequestRecord;
 }
 
 export async function createEventRequest(
@@ -183,5 +204,74 @@ export async function createEventRequest(
     throw error;
   }
 
-  return data as unknown as EventRequestRecord;
+  const record = data as Record<string, unknown>;
+  return {
+    ...record,
+    client: unwrapRelation<ClientSummary>(record.client),
+    submitter: unwrapRelation<SubmitterSummary>(record.submitter),
+    status: normalizeStatus(record.status),
+  } as EventRequestRecord;
+}
+
+export async function updateEventRequestStatus(
+  id: number,
+  status: EventRequestStatus,
+) {
+  const supabase = ensureSupabase();
+  const { data, error } = await supabase
+    .from("event_request")
+    .update({ status })
+    .eq("id", id)
+    .select(
+      `
+        id,
+        client_id,
+        client:client_id ( id, name, email, phone_number ),
+        submitter:submitter_id ( id, username, email ),
+        event_type,
+        status,
+        start_time,
+        finish_time,
+        location,
+        preferences,
+        note,
+        submitter_id,
+        created_at
+      `,
+    )
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  const record = data as Record<string, unknown>;
+  return {
+    ...record,
+    client: unwrapRelation<ClientSummary>(record.client),
+    submitter: unwrapRelation<SubmitterSummary>(record.submitter),
+    status: normalizeStatus(record.status),
+  } as EventRequestRecord;
+}
+
+function normalizeStatus(
+  value: unknown,
+): EventRequestStatus {
+  const fallback: EventRequestStatus = "DRAFT";
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const upper = value.toUpperCase();
+  return (EVENT_REQUEST_STATUSES.find((status) => status === upper) ??
+    fallback) as EventRequestStatus;
+}
+
+function unwrapRelation<T>(value: unknown): T | null {
+  if (!value) {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    return (value[0] ?? null) as T | null;
+  }
+  return value as T;
 }

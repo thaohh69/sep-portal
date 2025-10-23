@@ -10,10 +10,16 @@ import {
   EVENT_TYPES,
   createEventRequest,
   listEventRequests,
+  updateEventRequestStatus,
   type EventPreference,
   type EventRequestRecord,
   type EventType,
 } from "@/lib/event-request-service";
+import {
+  EVENT_REQUEST_REVIEW_STEPS,
+  EVENT_REQUEST_STATUS_STAGE,
+  type EventRequestStatus,
+} from "@/lib/event-request-config";
 
 type AlertState =
   | { type: "error"; message: string }
@@ -58,8 +64,10 @@ export function EventFlowPanel() {
   const [viewingRequest, setViewingRequest] =
     useState<EventRequestRecord | null>(null);
   const [formState, setFormState] = useState<FormState>(defaultFormState);
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
 
   const canCreate = profile?.role === "CUSTOMER_SERVICE";
+  const canReview = profile?.role === "SENIOR_CUSTOMER_SERVICE";
   const supabase = useMemo(() => {
     if (!hasEnvVars) {
       return null;
@@ -168,6 +176,53 @@ export function EventFlowPanel() {
     });
   };
 
+  const handleReview = async (
+    requestId: number,
+    nextStatus: Extract<EventRequestStatus, "PENDING" | "REJECTED">,
+  ) => {
+    if (!canReview || !profile) {
+      setAlert({
+        type: "error",
+        message: "You do not have permission to review event requests.",
+      });
+      return;
+    }
+
+    if (!hasEnvVars) {
+      setAlert({
+        type: "error",
+        message:
+          "Supabase environment variables are missing. Contact an administrator.",
+      });
+      return;
+    }
+
+    setUpdatingId(requestId);
+    setAlert(null);
+    try {
+      await updateEventRequestStatus(requestId, nextStatus);
+      await fetchData();
+      setAlert({
+        type: "success",
+        message:
+          nextStatus === "PENDING"
+            ? "Event request sent for further review."
+            : "Event request rejected.",
+      });
+    } catch (error) {
+      console.error(error);
+      setAlert({
+        type: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to update event request status.",
+      });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!profile || !canCreate) {
@@ -229,13 +284,17 @@ export function EventFlowPanel() {
     }
   };
 
-  const statusBadge = (status: string) => {
-    const classes =
-      status === "DRAFT"
-        ? "bg-amber-100 text-amber-700 border-amber-200"
-        : "bg-emerald-100 text-emerald-700 border-emerald-200";
+  const statusBadge = (status: EventRequestStatus) => {
+    const classes: Record<EventRequestStatus, string> = {
+      DRAFT: "bg-slate-100 text-slate-700 border-slate-300",
+      PENDING: "bg-amber-100 text-amber-700 border-amber-200",
+      REJECTED: "bg-rose-100 text-rose-700 border-rose-200",
+      OPEN: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    };
     return (
-      <span className={`rounded-full border px-2 py-1 text-xs font-medium ${classes}`}>
+      <span
+        className={`rounded-full border px-2 py-1 text-xs font-medium ${classes[status]}`}
+      >
         {status}
       </span>
     );
@@ -273,6 +332,11 @@ export function EventFlowPanel() {
           </p>
         </div>
       </div>
+      {request.status === "PENDING" && (
+        <div className="md:w-2/3">
+          <ReviewProgress status={request.status} />
+        </div>
+      )}
       <div className="flex items-center gap-2 self-start md:self-center">
         <button
           type="button"
@@ -281,6 +345,26 @@ export function EventFlowPanel() {
         >
           View
         </button>
+        {canReview && request.status === "DRAFT" && (
+          <>
+            <button
+              type="button"
+              onClick={() => handleReview(request.id, "PENDING")}
+              className="rounded-md border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-600 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={updatingId === request.id}
+            >
+              {updatingId === request.id ? "Approving..." : "Approve"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleReview(request.id, "REJECTED")}
+              className="rounded-md border border-rose-500 px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={updatingId === request.id}
+            >
+              {updatingId === request.id ? "Processing..." : "Reject"}
+            </button>
+          </>
+        )}
       </div>
     </article>
   );
@@ -611,6 +695,49 @@ function DetailItem({
       <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
         {children}
       </div>
+    </div>
+  );
+}
+
+function ReviewProgress({ status }: { status: EventRequestStatus }) {
+  const stage = EVENT_REQUEST_STATUS_STAGE[status];
+  if (stage === null) {
+    return null;
+  }
+
+  const steps = EVENT_REQUEST_REVIEW_STEPS;
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Review progress
+      </p>
+      <ol className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+        {steps.map((step, index) => {
+          const isComplete = stage > index;
+          const isCurrent = stage === index;
+          const bubbleClass = isComplete
+            ? "bg-emerald-500 text-white border-emerald-500"
+            : isCurrent
+              ? "bg-blue-100 text-blue-600 border-blue-200"
+              : "bg-white text-slate-400 border-slate-200";
+          const labelClass = isComplete
+            ? "text-emerald-600"
+            : isCurrent
+              ? "text-blue-600"
+              : "text-slate-400";
+          return (
+            <li key={step.key} className="flex items-center gap-3 text-sm">
+              <span
+                className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold ${bubbleClass}`}
+              >
+                {index + 1}
+              </span>
+              <span className={`font-medium ${labelClass}`}>{step.label}</span>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
