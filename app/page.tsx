@@ -8,8 +8,8 @@ import { cn } from "@/lib/utils";
 import { StaffManagementPanel } from "@/components/staff-management";
 import { EventFlowPanel } from "@/components/event-flow-panel";
 import { TaskDistributionPanel } from "@/components/task-distribution-panel";
-import { RecruitmentPanel } from "@/components/recruitment-panel";
-import { FinancialManagementPanel } from "@/components/financial-management-panel";
+import {RecruitmentPanel } from "@/components/recruitment-panel";
+import FinancialManagementPanel from "@/components/financial-management-panel";
 import { ClientManagementPanel } from "@/components/client-management-panel";
 
 export default function HomePage() {
